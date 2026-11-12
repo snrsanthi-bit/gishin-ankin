@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json の packageManager に書いた pnpm のバージョンを使う
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          # pnpm-lock.yaml をコミットしたら、ここに cache: pnpm を足す
+
+      # pnpm-lock.yaml をコミットしたら --frozen-lockfile に変える
+      - run: pnpm install --no-frozen-lockfile
+
+      - name: 型チェック
+        run: pnpm typecheck
+
+      - name: テスト
+        run: pnpm test
