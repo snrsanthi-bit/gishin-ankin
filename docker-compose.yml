@@ -4,15 +4,15 @@ services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_USER: shinriisen
-      POSTGRES_PASSWORD: shinriisen
-      POSTGRES_DB: shinriisen
+      POSTGRES_USER: gishin_ankin
+      POSTGRES_PASSWORD: gishin_ankin
+      POSTGRES_DB: gishin_ankin
     ports:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shinriisen"]
+      test: ["CMD-SHELL", "pg_isready -U gishin_ankin"]
       interval: 5s
       timeout: 3s
       retries: 10
