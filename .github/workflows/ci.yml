@@ -16,10 +16,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          # pnpm-lock.yaml をコミットしたら、ここに cache: pnpm を足す
+          cache: pnpm
 
-      # pnpm-lock.yaml をコミットしたら --frozen-lockfile に変える
-      - run: pnpm install --no-frozen-lockfile
+      # pnpm-lock.yaml と package.json がずれていたら失敗させる
+      - run: pnpm install --frozen-lockfile
 
       - name: 型チェック
         run: pnpm typecheck
