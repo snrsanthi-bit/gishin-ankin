@@ -6,7 +6,7 @@
 
 ```
 packages/
-  rules/   ルールエンジン（1ゲームの計算、試合終了から次の入場までの処理）。画面・サーバーに依存しない
+  rules/   ルールエンジン（1ゲームの計算、試合終了から次の入場までの処理）、Bot、1試合の進行、ターミナル版。画面・サーバーに依存しない
 apps/      （これから）web：React の画面 ／ server：Node.js のサーバー
 ```
 
@@ -22,7 +22,11 @@ pnpm test        # 全パッケージのテスト
 pnpm typecheck   # 型チェック
 pnpm db:up       # 開発用DBを起動（Docker）
 pnpm db:down     # 停止
+pnpm play        # ターミナルで練習試合（あなた1人＋Bot3体）
 ```
+
+`pnpm play --seed=42` で同じ試合をもう一度、`pnpm play --bots=smart,grudger,allIn` でBotを指定できる。
+Botの種類：`allIn`（毎回全額）、`freeRider`（毎回0円）、`random`（ばらばら）、`grudger`（裏切られたら1回仕返し）、`smart`（協力しつつDraw直前に裏切ることがある）
 
 ## お金の扱い（packages/rules）
 
