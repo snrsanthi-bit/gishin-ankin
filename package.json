@@ -9,7 +9,8 @@
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "db:up": "docker compose up -d db",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "play": "node --disable-warning=ExperimentalWarning packages/rules/src/cli/play.ts"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
