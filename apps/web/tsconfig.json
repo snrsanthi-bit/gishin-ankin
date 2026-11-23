@@ -7,5 +7,7 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // テストは Node.js で動かす表示用の計算だけなので、ブラウザ用の型チェックからは外す
+  "exclude": ["src/**/*.test.ts"]
 }
