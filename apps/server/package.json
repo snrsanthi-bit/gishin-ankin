@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts"
+  },
   "scripts": {
     "dev": "node --watch --disable-warning=ExperimentalWarning src/main.ts",
     "start": "node --disable-warning=ExperimentalWarning src/main.ts",

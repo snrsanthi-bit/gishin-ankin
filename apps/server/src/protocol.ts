@@ -4,6 +4,8 @@
  */
 import type { RoomView } from "./room.ts";
 
+export type { RoomView, SeatView, LastGameView, FinishedView } from "./room.ts";
+
 /** ブラウザ → サーバー */
 export type ClientMessage =
   /** 入室。前回もらった playerId を渡すと、同じ席に入り直せる */
