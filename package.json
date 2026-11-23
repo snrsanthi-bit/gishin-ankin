@@ -10,7 +10,9 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
-    "play": "node --disable-warning=ExperimentalWarning packages/rules/src/cli/play.ts"
+    "play": "node --disable-warning=ExperimentalWarning packages/rules/src/cli/play.ts",
+    "dev:server": "pnpm --filter @gishin-ankin/server dev",
+    "bots": "pnpm --filter @gishin-ankin/server bots"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
