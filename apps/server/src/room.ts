@@ -53,6 +53,8 @@ type Player = {
 export type SeatView = { seat: number; connected: boolean; confirmed: boolean; forfeited: boolean };
 
 export type LastGameView = {
+  /** そのゲームの開始時の自分の所持金 */
+  moneyBefore: number;
   contribution: number;
   distributionYen: number;
   bonusYen: number;
@@ -278,6 +280,7 @@ export class Room {
       last:
         lastResult && lastMine
           ? {
+              moneyBefore: lastMine.moneyBefore,
               contribution: lastMine.contribution,
               distributionYen: lastMine.distributionYen,
               bonusYen: lastMine.bonusYen,
