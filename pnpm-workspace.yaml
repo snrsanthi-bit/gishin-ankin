@@ -1,3 +1,7 @@
 packages:
   - "packages/*"
   - "apps/*"
+
+# インストール時のスクリプト実行を許可するパッケージ（Vite が使う esbuild）
+onlyBuiltDependencies:
+  - esbuild

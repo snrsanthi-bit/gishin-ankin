@@ -7,7 +7,9 @@
 ```
 packages/
   rules/   ルールエンジン（1ゲームの計算、試合終了から次の入場までの処理）、Bot、1試合の進行、ターミナル版。画面・サーバーに依存しない
-apps/      （これから）web：React の画面 ／ server：Node.js のサーバー
+apps/
+  server/  サーバー。試合の部屋（room.ts）、接続の受付（hub.ts）、WebSocket（main.ts）
+  web/     React の画面（Vite）。開発中は /ws をサーバーへ中継する
 ```
 
 - 言語：TypeScript。Node.js 22 の型の取り除き機能で、ビルドせずにそのまま実行する
@@ -23,7 +25,14 @@ pnpm typecheck   # 型チェック
 pnpm db:up       # 開発用DBを起動（Docker）
 pnpm db:down     # 停止
 pnpm play        # ターミナルで練習試合（あなた1人＋Bot3体）
+pnpm dev         # サーバーと画面を一緒に起動 → http://localhost:5173
+pnpm dev:server  # サーバーだけ起動（ws://localhost:8787/ws）
+pnpm dev:web     # 画面だけ起動
+pnpm bots        # 起動中のサーバーにBotを3体つなぐ（--n=4 でBotだけの試合）
 ```
+
+動作確認のときは `THINK_SEC=20 pnpm dev` のように、出資受付の時間を短くできる。
+ひとりで試すときは、ブラウザで「試合を探す」を押してから、別のターミナルで `pnpm bots` を実行する（ブラウザ1つ＋Bot3体で試合が始まる）。
 
 `pnpm play --seed=42` で同じ試合をもう一度、`pnpm play --bots=smart,grudger,allIn` でBotを指定できる。
 Botの種類：`allIn`（毎回全額）、`freeRider`（毎回0円）、`random`（ばらばら）、`grudger`（裏切られたら1回仕返し）、`smart`（協力しつつDraw直前に裏切ることがある）
