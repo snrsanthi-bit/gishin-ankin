@@ -34,3 +34,11 @@ export function parseAmount(text: string, max: number): number | null {
 export function signedMan(v: number): string {
   return v >= 0 ? `+${v}万` : `−${-v}万`;
 }
+
+export type SeatPosition = "me" | "left" | "top" | "right";
+
+/** 自分から見た席の位置（4人卓：自分が下、時計回りに左・上・右） */
+export function seatPosition(seat: number, mySeat: number, players = 4): SeatPosition {
+  const order: SeatPosition[] = ["me", "left", "top", "right"];
+  return order[(((seat - mySeat) % players) + players) % players] ?? "top";
+}

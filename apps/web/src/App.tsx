@@ -1,191 +1,320 @@
-import { useEffect, useState } from "react";
-import type { ClientMessage, RoomView } from "@gishin-ankin/server/protocol";
+/**
+ * 画面の配置は「claude/UI規則.md」に従う。
+ * - 主役はチャット。真ん中に大きく置く。チャット欄には人間の言葉だけを流す
+ * - 周りに4席（自分を下に、時計回り）、上に連続回数のランプと残り時間の輪、ゲームごとの●／×
+ * - 出資の入力は下に固定。所持金確認など普段使わない操作はたたむ
+ * - 状態は文字ではなく、形（封筒・ランプ・輪）で見せる。説明はカーソルを合わせたときだけ
+ * 動き・音・カットインはまだ入れていない（次の作業）
+ */
+import { useEffect, useRef, useState } from "react";
+import type { ChatMessage, ClientMessage, RoomView, SeatView } from "@gishin-ankin/server/protocol";
 import { useGame, type MoneyCheck, type Status } from "./useGame.ts";
-import { clockwise, man, parseAmount, remainingSec, seatLabel, signedMan } from "./format.ts";
+import { clockwise, man, parseAmount, remainingSec, seatLabel, seatPosition, signedMan } from "./format.ts";
 
 type MatchView = Extract<RoomView, { phase: "playing" | "finished" }>;
+type Send = (m: ClientMessage) => void;
 
 export function App() {
   const g = useGame();
+  if (!g.view) return <Title status={g.status} onStart={g.start} />;
+  if (g.view.phase === "waiting") return <Waiting joined={g.view.joined} players={g.view.players} status={g.status} />;
   return (
-    <main className="app">
-      <header className="title">
-        <h1>疑心暗金</h1>
-        <ConnectionBadge status={g.status} />
-      </header>
-      {g.error && <p className="toast">{g.error}</p>}
-      {!g.view ? (
-        <Title status={g.status} onStart={g.start} />
-      ) : g.view.phase === "waiting" ? (
-        <Waiting joined={g.view.joined} players={g.view.players} />
-      ) : (
-        <Match view={g.view} offset={g.offset} checks={g.checks} send={g.send} />
-      )}
-    </main>
+    <Table
+      view={g.view}
+      offset={g.offset}
+      checks={g.checks}
+      chat={g.chat}
+      error={g.error}
+      status={g.status}
+      send={g.send}
+      sendChat={g.sendChat}
+    />
   );
-}
-
-function ConnectionBadge({ status }: { status: Status }) {
-  if (status === "open" || status === "idle") return null;
-  return <span className="badge warn">{status === "reconnecting" ? "再接続中…" : "接続中…"}</span>;
 }
 
 function Title({ status, onStart }: { status: Status; onStart: () => void }) {
   return (
-    <section className="panel center">
-      <p className="lead">4人で出資額を決め合う心理戦。全員が5回続けて全額を出せばDraw。</p>
+    <main className="screen center">
+      <h1 className="logo">疑心暗金</h1>
+      <p className="lead">4人で出資額を決め合う心理戦</p>
       <button className="primary big" onClick={onStart} disabled={status !== "idle"}>
         試合を探す
       </button>
-    </section>
+    </main>
   );
 }
 
-function Waiting({ joined, players }: { joined: number; players: number }) {
+function Waiting({ joined, players, status }: { joined: number; players: number; status: Status }) {
   return (
-    <section className="panel center">
-      <p className="lead">
-        対戦相手を待っています（{joined}/{players}人）
-      </p>
-      <p className="hint">ひとりで試すときは、別のターミナルで pnpm bots を実行するとBotが入ってきます。</p>
-    </section>
+    <main className="screen center">
+      <h1 className="logo">疑心暗金</h1>
+      <div className="waiting-seats" title={`${joined}/${players}人`}>
+        {Array.from({ length: players }, (_, i) => (
+          <span key={i} className={i < joined ? "chair taken" : "chair"} />
+        ))}
+      </div>
+      <p className="lead">対戦相手を待っています</p>
+      {status === "reconnecting" && <p className="hint">再接続中…</p>}
+    </main>
   );
 }
 
-/** 手元の時計をサーバーの時刻に合わせて、少しずつ進める */
+/** 手元の時計をサーバーの時刻に合わせて進める */
 function useServerNow(offset: number): number {
   const [now, setNow] = useState(() => Date.now() + offset);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now() + offset), 250);
+    const t = setInterval(() => setNow(Date.now() + offset), 200);
     return () => clearInterval(t);
   }, [offset]);
   return now;
 }
 
-function Match({
-  view,
-  offset,
-  checks,
-  send,
-}: {
+function Table(props: {
   view: MatchView;
   offset: number;
   checks: MoneyCheck[];
-  send: (m: ClientMessage) => void;
+  chat: ChatMessage[];
+  error: string | null;
+  status: Status;
+  send: Send;
+  sendChat: (text: string) => void;
 }) {
-  const now = useServerNow(offset);
-  const left = remainingSec(view.deadline, now);
-  const playing = view.phase === "playing" && !view.you.forfeited;
+  const { view, send } = props;
+  const now = useServerNow(props.offset);
+  const [, left, top, right] = clockwise(view.seats, view.you.seat);
 
   return (
-    <>
-      <section className="panel status">
-        <div>
-          ゲーム <strong>{Math.min(view.game + 1, view.gamesPerMatch)}</strong>/{view.gamesPerMatch}
+    <main className="table">
+      <header className="bar">
+        <span className="logo small">疑心暗金</span>
+        <GameMarks outcomes={view.outcomes} total={view.gamesPerMatch} current={view.game} finished={view.phase === "finished"} />
+        <span className="bar-right">{props.status === "reconnecting" && <span className="badge warn">再接続中…</span>}</span>
+      </header>
+
+      <div className="area-top">{top && <Seat seat={top} view={view} checks={props.checks} send={send} />}</div>
+      <div className="area-left">{left && <Seat seat={left} view={view} checks={props.checks} send={send} />}</div>
+      <div className="area-right">{right && <Seat seat={right} view={view} checks={props.checks} send={send} />}</div>
+
+      <section className="area-center">
+        <div className="center-head">
+          <Lamps streak={view.streak} drawStreak={view.drawStreak} draw={view.finished?.draw ?? false} />
+          {view.phase === "playing" && <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />}
         </div>
-        <Streak streak={view.streak} drawStreak={view.drawStreak} />
-        {left !== null && <div className={left <= 10 ? "timer urgent" : "timer"}>残り {left}秒</div>}
+        <Chat messages={props.chat} mySeat={view.you.seat} players={view.seats.length} onSend={props.sendChat} />
       </section>
 
-      <section className="panel mine">
-        <div>
-          あなた（{seatLabel(view.you.seat)}）の所持金
-          <div className="money">{view.you.money}万</div>
-        </div>
-        {view.isTop && view.phase === "playing" && <span className="badge gold">★ あなたが1位です</span>}
-        {view.you.forfeited && <span className="badge">棄権しました</span>}
+      <section className="area-me">
+        <MyArea view={view} send={send} />
+        {props.error && <p className="toast">{props.error}</p>}
       </section>
-
-      <Seats view={view} checks={checks} send={send} />
-
-      {view.last && <LastGame view={view} />}
-
-      {playing && <ContributionForm key={view.game} view={view} send={send} />}
-
-      {view.finished && <Finished view={view} send={send} />}
-    </>
+    </main>
   );
 }
 
-function Streak({ streak, drawStreak }: { streak: number; drawStreak: number }) {
+/** ゲーム1〜10のマス：●＝全員が全額出資、×＝途切れた */
+function GameMarks({ outcomes, total, current, finished }: { outcomes: boolean[]; total: number; current: number; finished: boolean }) {
   return (
-    <div className="streak" title="全員が全額出資した連続回数">
-      全員全額の連続
-      <span className="dots">
-        {Array.from({ length: drawStreak }, (_, i) => (
-          <span key={i} className={i < streak ? "dot on" : "dot"} />
-        ))}
-      </span>
-      Drawまであと{drawStreak - streak}回
+    <ol className="marks" title="ゲームごとの結果（●＝全員が全額出資／×＝途切れた）">
+      {Array.from({ length: total }, (_, i) => {
+        const o = outcomes[i];
+        const cls = o === undefined ? (i === current && !finished ? "mark now" : "mark") : o ? "mark ok" : "mark ng";
+        return (
+          <li key={i} className={cls} aria-label={`ゲーム${i + 1}`}>
+            {o === undefined ? "" : o ? "●" : "×"}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** 連続回数：5つのランプ */
+function Lamps({ streak, drawStreak, draw }: { streak: number; drawStreak: number; draw: boolean }) {
+  return (
+    <div className={draw ? "lamps draw" : "lamps"} title={`全員が全額出資した連続回数（${drawStreak}回でDraw）`}>
+      {Array.from({ length: drawStreak }, (_, i) => (
+        <span key={i} className={i < streak || draw ? "lamp on" : "lamp"} />
+      ))}
     </div>
   );
 }
 
-function Seats({ view, checks, send }: { view: MatchView; checks: MoneyCheck[]; send: (m: ClientMessage) => void }) {
-  const canCheck = view.phase === "playing" && view.you.moneyChecksLeft > 0 && !view.you.forfeited;
+/** 残り時間：縮んでいく輪 */
+function TimerRing({ deadline, thinkMs, now }: { deadline: number | null; thinkMs: number; now: number }) {
+  const left = remainingSec(deadline, now);
+  if (left === null || deadline === null) return null;
+  const ratio = Math.max(0, Math.min(1, (deadline - now) / thinkMs));
+  const r = 18;
+  const c = 2 * Math.PI * r;
   return (
-    <section className="seats">
-      {clockwise(view.seats, view.you.seat).map((s) => {
-        const me = s.seat === view.you.seat;
-        const checked = checks.filter((c) => c.seat === s.seat);
-        return (
-          <div key={s.seat} className={me ? "seat me" : "seat"}>
-            <div className="seat-name">
-              {seatLabel(s.seat)}
-              {me && "（あなた）"}
-            </div>
-            <div className="seat-state">
-              {s.forfeited ? (
-                <span className="badge">棄権</span>
-              ) : !s.connected ? (
-                <span className="badge warn">離席中</span>
-              ) : view.phase === "playing" ? (
-                <span className={s.confirmed ? "badge ok" : "badge"}>{s.confirmed ? "確定済み" : "考え中"}</span>
-              ) : null}
-            </div>
-            {checked.map((c, i) => (
-              <div key={i} className="hint">
-                ゲーム{c.game + 1}開始時：{c.money}万
-              </div>
-            ))}
-            {!me && canCheck && !s.forfeited && (
-              <button className="small" onClick={() => send({ type: "checkMoney", seat: s.seat })}>
-                所持金を確認（残り{view.you.moneyChecksLeft}回）
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </section>
+    <svg className={left <= 10 ? "ring urgent" : "ring"} viewBox="0 0 44 44" width="44" height="44" aria-label={`残り${left}秒`}>
+      <title>{`残り${left}秒`}</title>
+      <circle cx="22" cy="22" r={r} className="ring-bg" />
+      <circle cx="22" cy="22" r={r} className="ring-fg" strokeDasharray={c} strokeDashoffset={c * (1 - ratio)} />
+    </svg>
   );
 }
 
-function LastGame({ view }: { view: MatchView }) {
-  const l = view.last;
-  if (!l) return null;
-  const message =
-    l.streakAfter > 0
-      ? `全員が全額出資！ 連続${l.streakAfter}回`
-      : l.distributionYen === 0
-        ? "誰も出資しませんでした"
-        : "連続が途切れました（誰かが全額出資しなかった）";
+function seatState(s: SeatView, playing: boolean): { icon: string; label: string; cls: string } {
+  if (s.forfeited) return { icon: "✕", label: "棄権", cls: "forfeited" };
+  if (!s.connected) return { icon: "💤", label: "離席中", cls: "away" };
+  if (playing && s.confirmed) return { icon: "✉", label: "確定済み", cls: "confirmed" };
+  return { icon: "", label: playing ? "考え中" : "", cls: "" };
+}
+
+function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; checks: MoneyCheck[]; send: Send }) {
+  const state = seatState(seat, view.phase === "playing");
+  const mine = checks.filter((c) => c.seat === seat.seat);
+  const canCheck = view.phase === "playing" && view.you.moneyChecksLeft > 0 && !view.you.forfeited && !seat.forfeited;
   return (
-    <section className="panel last">
-      <div className="label">前のゲーム</div>
-      <div className="row">
-        <span>出資 {l.contribution}万</span>
-        <span>分配 {man(l.distributionYen)}</span>
-        <span>ボーナス {man(l.bonusYen)}</span>
-        <span>
-          所持金 {l.moneyBefore}万 → <strong>{l.moneyAfter}万</strong>
-        </span>
+    <div className={`seat ${state.cls}`} title={state.label}>
+      <div className="seat-name">{seatLabel(seat.seat)}</div>
+      <div className="envelope" aria-label={state.label}>
+        {state.icon}
       </div>
-      <div className={l.streakAfter > 0 ? "good" : "bad"}>{message}</div>
-    </section>
+      {mine.map((c, i) => (
+        <div key={i} className="checked" title={`ゲーム${c.game + 1}開始時の所持金`}>
+          {c.money}万
+        </div>
+      ))}
+      {canCheck && (
+        <details className="fold">
+          <summary title="所持金を確認" aria-label="所持金を確認">
+            🔍
+          </summary>
+          <button className="small" onClick={() => send({ type: "checkMoney", seat: seat.seat })}>
+            所持金を確認（残り{view.you.moneyChecksLeft}回）
+          </button>
+        </details>
+      )}
+    </div>
   );
 }
 
-function ContributionForm({ view, send }: { view: MatchView; send: (m: ClientMessage) => void }) {
+function Chat({
+  messages,
+  mySeat,
+  players,
+  onSend,
+}: {
+  messages: ChatMessage[];
+  mySeat: number;
+  players: number;
+  onSend: (t: string) => void;
+}) {
+  const [text, setText] = useState("");
+  const [unread, setUnread] = useState(false);
+  const listRef = useRef<HTMLOListElement | null>(null);
+  /** いちばん下を見ているか（読み返している最中は false） */
+  const atBottom = useRef(true);
+  const prevCount = useRef(0);
+
+  const scrollToBottom = () => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    atBottom.current = true;
+    setUnread(false);
+  };
+
+  // 初回表示・入り直しで履歴をまとめて受け取ったとき・自分が送ったときは、いちばん下へ。
+  // それ以外の新着は、いちばん下を見ているときだけ追いかける（読み返しの邪魔をしない）
+  useEffect(() => {
+    const added = messages.length - prevCount.current;
+    const bulk = prevCount.current === 0 || added > 1 || added < 0;
+    prevCount.current = messages.length;
+    if (added === 0) return;
+    const mine = messages.at(-1)?.seat === mySeat;
+    if (bulk || mine || atBottom.current) scrollToBottom();
+    else setUnread(true);
+  }, [messages, mySeat]);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    onSend(t);
+    setText("");
+  };
+
+  return (
+    <div className="chat">
+      <ol
+        className="chat-list"
+        ref={listRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          if (atBottom.current) setUnread(false);
+        }}
+      >
+        {messages.map((m) => (
+          // 発言は、話した人の席の方向に寄せて置く（誰が話したかを、文字を読まずに位置で分かるように）
+          <li key={m.id} className={`msg from-${seatPosition(m.seat, mySeat, players)}`}>
+            <span className={`who s${m.seat}`}>{seatLabel(m.seat)}</span>
+            <span className="text">{m.text}</span>
+          </li>
+        ))}
+      </ol>
+      {unread && (
+        <button className="unread" onClick={scrollToBottom}>
+          ↓ 新しい発言
+        </button>
+      )}
+      <div className="chat-input">
+        <input
+          value={text}
+          maxLength={200}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            // 日本語の変換を確定する Enter は IME に任せ、何もしない（送らない・止めない）。
+            // Safari は確定の Enter で isComposing が false になることがあるので、keyCode 229 も見る
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            e.preventDefault();
+            submit();
+          }}
+          placeholder="話しかける"
+          aria-label="チャット"
+        />
+        <button onClick={submit} disabled={text.trim() === ""}>
+          送る
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MyArea({ view, send }: { view: MatchView; send: Send }) {
+  const l = view.last;
+  return (
+    <div className="me-row">
+      <div className="me-seat">
+        <div className="seat-name">
+          {seatLabel(view.you.seat)}
+          {view.isTop && view.phase === "playing" && (
+            <span className="crown" title="あなたが1位です">
+              ♛
+            </span>
+          )}
+        </div>
+        <div className="coins" title="あなたの試合内所持金">
+          <span className="coin-icon">◎</span>
+          <span className="money">{view.you.money}</span>
+          <span className="unit">万</span>
+        </div>
+        {l && (
+          <div className="last" title="前のゲーム：出資／分配／ボーナス">
+            −{l.contribution} ＋{man(l.distributionYen)} ＋{man(l.bonusYen)}
+          </div>
+        )}
+      </div>
+      {view.phase === "playing" && !view.you.forfeited && <ContributionForm key={view.game} view={view} send={send} />}
+      {view.phase === "playing" && view.you.forfeited && <div className="note">棄権しました</div>}
+      {view.finished && <Finished view={view} send={send} />}
+    </div>
+  );
+}
+
+function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
   const money = view.you.money;
   const [text, setText] = useState(view.you.input === null ? "" : String(view.you.input));
   const amount = parseAmount(text, money);
@@ -202,22 +331,22 @@ function ContributionForm({ view, send }: { view: MatchView; send: (m: ClientMes
   };
 
   return (
-    <section className="panel form">
-      <label className="label" htmlFor="amount">
-        出資額（0〜{money}万）
-      </label>
-      <div className="row">
+    <div className="contribute">
+      <div className="amount">
         <input
-          id="amount"
           inputMode="numeric"
           value={text}
           disabled={confirmed}
           onChange={(e) => onText(e.target.value)}
           placeholder="0"
+          aria-label={`出資額（0〜${money}万）`}
+          className={text !== "" && amount === null ? "invalid" : ""}
         />
-        <span>万</span>
+        <span className="unit">/ {money}万</span>
+      </div>
+      <div className="quick">
         <button onClick={() => set(0)} disabled={confirmed}>
-          0円
+          0
         </button>
         <button onClick={() => set(Math.floor(money / 2))} disabled={confirmed}>
           半分
@@ -226,70 +355,72 @@ function ContributionForm({ view, send }: { view: MatchView; send: (m: ClientMes
           全額
         </button>
       </div>
-      {text !== "" && amount === null && <div className="bad">0〜{money}の整数で入力してください</div>}
-      <div className="row">
-        {confirmed ? (
-          <button onClick={() => send({ type: "confirm", confirmed: false })}>確定を取り消す</button>
-        ) : (
-          <button className="primary" onClick={() => send({ type: "confirm", confirmed: true })} disabled={text !== "" && amount === null}>
-            {amount === null ? "0円で確定" : `${amount}万で確定`}
-          </button>
-        )}
-      </div>
-      <p className="hint">締め切りまで何度でも変えられます。確定しなくても、締め切りの時点で入力している額が出資になります。何も入力しないと不在（0円）扱いです。</p>
-    </section>
+      {confirmed ? (
+        <button className="confirm done" onClick={() => send({ type: "confirm", confirmed: false })} title="確定を取り消す">
+          ✉ 確定済み
+        </button>
+      ) : (
+        <button
+          className="confirm primary"
+          onClick={() => send({ type: "confirm", confirmed: true })}
+          disabled={text !== "" && amount === null}
+          title="締め切りまでは取り消せます。確定しなくても、締め切りの時点で入力している額が出資になります"
+        >
+          確定
+        </button>
+      )}
+    </div>
   );
 }
 
-function Finished({ view, send }: { view: MatchView; send: (m: ClientMessage) => void }) {
+function Finished({ view, send }: { view: MatchView; send: Send }) {
   const [showRecord, setShowRecord] = useState(false);
   const f = view.finished;
   if (!f) return null;
   return (
-    <section className="panel finished">
-      <h2>{f.draw ? "🤝 Draw成立" : "試合終了"}</h2>
-      <div className="row">
-        <span>
-          持ち帰り <strong>{f.money}万</strong>
-        </span>
+    <div className="finished">
+      <div className="result">
+        <span className="result-title">{f.draw ? "Draw" : "終了"}</span>
+        <strong>{f.money}万</strong>
         <span>{f.rank}位</span>
-        <span>次の参加費 {f.nextFee}万</span>
-        <span>
-          実質 <strong>{signedMan(f.money - f.nextFee)}</strong>
-        </span>
+        <span title={`次の参加費 ${f.nextFee}万`}>実質 {signedMan(f.money - f.nextFee)}</span>
       </div>
-      <div className="row">
+      <div className="quick">
         <button onClick={() => setShowRecord((s) => !s)}>{showRecord ? "牌譜を閉じる" : "牌譜を見る"}</button>
         <button className="primary" onClick={() => send({ type: "next" })}>
           次の試合へ
         </button>
       </div>
       {showRecord && (
-        <table className="record">
-          <thead>
-            <tr>
-              <th />
-              {view.seats.map((s) => (
-                <th key={s.seat} className={s.seat === view.you.seat ? "me" : ""}>
-                  {seatLabel(s.seat)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {f.record.map((row, gi) => (
-              <tr key={gi}>
-                <th>G{gi + 1}</th>
-                {row.map((c, si) => (
-                  <td key={si} className={si === view.you.seat ? "me" : ""}>
-                    {c === null ? "棄権" : c}
-                  </td>
+        <div className="overlay" onClick={() => setShowRecord(false)}>
+          <table className="record" onClick={(e) => e.stopPropagation()}>
+            <thead>
+              <tr>
+                <th />
+                {view.seats.map((s) => (
+                  <th key={s.seat} className={s.seat === view.you.seat ? "me" : ""}>
+                    {seatLabel(s.seat)}
+                  </th>
                 ))}
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {f.record.map((row, gi) => (
+                <tr key={gi}>
+                  <th>{gi + 1}</th>
+                  {row.map((c, si) => (
+                    <td key={si} className={si === view.you.seat ? "me" : ""}>
+                      {c === null ? "✕" : c}
+                    </td>
+                  ))}
+                  <td>{view.outcomes[gi] ? "●" : "×"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </section>
+    </div>
   );
 }

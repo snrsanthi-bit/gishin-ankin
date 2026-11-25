@@ -83,6 +83,10 @@ export type RoomView =
       you: { seat: number; money: number; input: number | null; confirmed: boolean; forfeited: boolean; moneyChecksLeft: number };
       game: number;
       gamesPerMatch: number;
+      /** 終わったゲームごとの結果：全員が全額出資したか（連続回数の推移から分かる情報） */
+      outcomes: boolean[];
+      /** 1ゲームの出資受付時間（残り時間の輪の表示用） */
+      thinkMs: number;
       streak: number;
       drawStreak: number;
       /** 出資の締め切り（ミリ秒）。終了後は null */
@@ -274,6 +278,8 @@ export class Room {
       },
       game: match.gamesPlayed,
       gamesPerMatch: this.config.rules.gamesPerMatch,
+      outcomes: this.history.map((g) => g.kind === "allIn"),
+      thinkMs: this.config.thinkMs,
       streak: match.streak,
       drawStreak: this.config.rules.drawStreak,
       deadline: this.deadline,
