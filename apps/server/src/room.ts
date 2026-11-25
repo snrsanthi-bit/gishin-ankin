@@ -20,6 +20,7 @@ import {
   type Rng,
   type RulesConfig,
 } from "@gishin-ankin/rules";
+import { DEFAULT_CHAT_CONFIG, RateLimiter, cleanChatText, type ChatConfig, type ChatMessage, type StoredChatMessage } from "./chat.ts";
 
 export type RoomConfig = {
   players: number;
@@ -28,6 +29,7 @@ export type RoomConfig = {
   /** 1試合あたりの所持金確認の回数 */
   moneyChecksPerMatch: number;
   rules: RulesConfig;
+  chat: ChatConfig;
 };
 
 export const DEFAULT_ROOM_CONFIG: RoomConfig = {
@@ -35,6 +37,7 @@ export const DEFAULT_ROOM_CONFIG: RoomConfig = {
   thinkMs: 180_000,
   moneyChecksPerMatch: 1,
   rules: DEFAULT_CONFIG,
+  chat: DEFAULT_CHAT_CONFIG,
 };
 
 export type RoomPhase = "waiting" | "playing" | "finished";
@@ -104,10 +107,14 @@ export class Room {
   private deadline: number | null = null;
   private readonly history: GameResult[] = [];
   private nextFee: number | null = null;
+  private readonly chatLog: StoredChatMessage[] = [];
+  private nextChatId = 1;
+  private readonly chatLimiter: RateLimiter;
 
   constructor(config: RoomConfig = DEFAULT_ROOM_CONFIG, seed = Math.floor(Math.random() * 1e9)) {
     this.config = config;
     this.rng = createRng(seed);
+    this.chatLimiter = new RateLimiter(config.chat.maxPerWindow, config.chat.windowMs);
   }
 
   /** 入室。試合中に同じ id で入り直すと再接続になる */
@@ -290,6 +297,33 @@ export class Room {
           : null,
       finished,
     });
+  }
+
+  /**
+   * チャットを送る。試合中と、試合後の結果発表中に使える（席番号が決まっている間）。
+   * 参加者に見せるのは伏せ字の後の文章だけ。元の文章は運営用に残す
+   */
+  sendChat(id: string, raw: string, now: number): Result<ChatMessage> {
+    const player = this.players.find((p) => p.id === id);
+    if (!player) return err("この部屋の参加者ではありません");
+    if (this.phase === "waiting") return err("試合が始まってから話せます");
+    const cleaned = cleanChatText(raw, this.config.chat);
+    if (!cleaned.ok) return cleaned;
+    if (!this.chatLimiter.take(id, now)) return err("少し間をあけてから送ってください");
+    const message: ChatMessage = { id: this.nextChatId++, seat: player.seat, text: cleaned.text, at: now };
+    this.chatLog.push({ ...message, original: raw, playerId: id });
+    if (this.chatLog.length > this.config.chat.maxHistory) this.chatLog.shift();
+    return ok(message);
+  }
+
+  /** 参加者に見せるチャットの履歴（伏せ字の後） */
+  chatHistory(): ChatMessage[] {
+    return this.chatLog.map(({ id, seat, text, at }) => ({ id, seat, text, at }));
+  }
+
+  /** 運営用：元の文章と送った人を含む記録（モデレーション・保存用） */
+  chatRecordForOperator(): readonly StoredChatMessage[] {
+    return this.chatLog;
   }
 
   /** 部屋にいる参加者の id */

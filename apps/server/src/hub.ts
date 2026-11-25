@@ -66,6 +66,11 @@ export class Hub {
         send(conn, { type: "moneyCheck", seat: msg.seat, money: r.value });
         break;
       }
+      case "chat": {
+        const r = room.sendChat(id, msg.text, now);
+        if (!r.ok) return send(conn, { type: "error", message: r.error });
+        return this.sendToRoom(room, { type: "chat", message: r.value });
+      }
       case "next": {
         if (room.phase !== "finished") return send(conn, { type: "error", message: "試合はまだ終わっていません" });
         this.roomOf.delete(id);
@@ -126,12 +131,22 @@ export class Hub {
 
     send(conn, { type: "welcome", playerId: id });
     this.broadcast(room, now);
+    if (room.phase !== "waiting") send(conn, { type: "chatHistory", messages: room.chatHistory() });
   }
 
   private createRoom(): Room {
     const room = new Room(this.roomConfig, this.seed++);
     this.rooms.push(room);
     return room;
+  }
+
+  /** 部屋の全員（まだその部屋にいる人）に同じメッセージを送る */
+  private sendToRoom(room: Room, msg: ServerMessage): void {
+    const text = JSON.stringify(msg);
+    for (const id of room.playerIds()) {
+      if (this.roomOf.get(id) !== room) continue;
+      for (const conn of this.connsOf.get(id) ?? []) conn.send(text);
+    }
   }
 
   private broadcast(room: Room, now: number): void {
