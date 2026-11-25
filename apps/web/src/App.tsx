@@ -191,15 +191,30 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
 
 function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: number; onSend: (t: string) => void }) {
   const [text, setText] = useState("");
+  const [unread, setUnread] = useState(false);
   const listRef = useRef<HTMLOListElement | null>(null);
+  /** いちばん下を見ているか（読み返している最中は false） */
+  const atBottom = useRef(true);
+  const prevCount = useRef(0);
 
-  // 新しい発言が来たら下までスクロール（読み返している最中は動かさない）
-  useEffect(() => {
+  const scrollToBottom = () => {
     const el = listRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    if (el) el.scrollTop = el.scrollHeight;
+    atBottom.current = true;
+    setUnread(false);
+  };
+
+  // 初回表示・入り直しで履歴をまとめて受け取ったとき・自分が送ったときは、いちばん下へ。
+  // それ以外の新着は、いちばん下を見ているときだけ追いかける（読み返しの邪魔をしない）
+  useEffect(() => {
+    const added = messages.length - prevCount.current;
+    const bulk = prevCount.current === 0 || added > 1 || added < 0;
+    prevCount.current = messages.length;
+    if (added === 0) return;
+    const mine = messages.at(-1)?.seat === mySeat;
+    if (bulk || mine || atBottom.current) scrollToBottom();
+    else setUnread(true);
+  }, [messages, mySeat]);
 
   const submit = () => {
     const t = text.trim();
@@ -210,7 +225,15 @@ function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: n
 
   return (
     <div className="chat">
-      <ol className="chat-list" ref={listRef}>
+      <ol
+        className="chat-list"
+        ref={listRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          if (atBottom.current) setUnread(false);
+        }}
+      >
         {messages.map((m) => (
           <li key={m.id} className={m.seat === mySeat ? "msg mine" : "msg"}>
             <span className={`who s${m.seat}`}>{seatLabel(m.seat)}</span>
@@ -218,28 +241,31 @@ function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: n
           </li>
         ))}
       </ol>
-      <form
-        className="chat-input"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
+      {unread && (
+        <button className="unread" onClick={scrollToBottom}>
+          ↓ 新しい発言
+        </button>
+      )}
+      <div className="chat-input">
         <input
           value={text}
           maxLength={200}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            // 日本語の変換を確定する Enter では送らない
-            if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
+            if (e.key !== "Enter") return;
+            // 日本語の変換を確定する Enter は IME に任せ、何もしない（送らない・止めない）。
+            // Safari は確定の Enter で isComposing が false になることがあるので、keyCode 229 も見る
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            e.preventDefault();
+            submit();
           }}
           placeholder="話しかける"
           aria-label="チャット"
         />
-        <button type="submit" disabled={text.trim() === ""}>
+        <button onClick={submit} disabled={text.trim() === ""}>
           送る
         </button>
-      </form>
+      </div>
     </div>
   );
 }

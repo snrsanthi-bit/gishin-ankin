@@ -120,7 +120,7 @@ input.invalid {
   box-sizing: border-box;
   padding: 10px 14px 14px;
   display: grid;
-  grid-template-columns: 170px minmax(380px, 1fr) 170px;
+  grid-template-columns: 170px minmax(0, 1fr) 170px;
   grid-template-rows: auto auto 1fr auto;
   grid-template-areas:
     "bar bar bar"
@@ -284,6 +284,7 @@ input.invalid {
 
 /* チャット */
 .chat {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -339,6 +340,17 @@ input.invalid {
 }
 .chat-input input {
   flex: 1;
+  min-width: 0;
+}
+
+.unread {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  padding: 4px 12px;
+  border-color: var(--accent);
 }
 
 /* 自分（下） */
@@ -466,4 +478,45 @@ input.invalid {
 }
 .record .me {
   color: var(--accent);
+}
+
+/* 狭い画面：まずはPCの小さめのウィンドウで崩れないことを優先（スマホの作り込みは後回し） */
+@media (max-width: 1000px) {
+  .table {
+    grid-template-columns: 130px minmax(0, 1fr) 130px;
+  }
+  .seat {
+    min-width: 0;
+  }
+}
+/* さらに狭いときは、3席を上に横並びにして、チャットを全幅にする */
+@media (max-width: 760px) {
+  .table {
+    height: auto;
+    min-height: 100vh;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto auto minmax(320px, 1fr) auto;
+    grid-template-areas:
+      "bar bar bar"
+      "left top right"
+      "center center center"
+      "me me me";
+  }
+  .area-left,
+  .area-right {
+    align-self: stretch;
+  }
+  .area-top {
+    display: block;
+  }
+  .bar {
+    flex-wrap: wrap;
+  }
+  .contribute,
+  .finished {
+    margin-left: 0;
+  }
+  .amount input {
+    width: 5em;
+  }
 }
