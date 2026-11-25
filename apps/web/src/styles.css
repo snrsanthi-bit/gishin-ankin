@@ -258,7 +258,7 @@ input.invalid {
 .seat {
   min-width: 140px;
   /* 席の色はチャットの吹き出しと同じ。卓の席と発言をひと目で結びつける */
-  background: color-mix(in srgb, var(--seat, var(--line)) 14%, var(--panel));
+  background: var(--panel);
   border: 2px solid color-mix(in srgb, var(--seat, var(--line)) 70%, transparent);
   border-radius: 12px;
   padding: 10px;
@@ -425,7 +425,7 @@ input.invalid {
   display: flex;
   align-items: center;
   gap: 18px;
-  background: color-mix(in srgb, var(--seat, var(--accent)) 10%, var(--panel));
+  background: var(--panel);
   border: 2px solid color-mix(in srgb, var(--seat, var(--accent)) 70%, transparent);
   border-radius: 12px;
   padding: 10px 14px;
