@@ -322,79 +322,74 @@ input.invalid {
   gap: 8px;
   scrollbar-color: rgb(255 255 255 / 20%) transparent;
 }
-/* 発言は話した人の席の方向に寄せ、吹き出しのしっぽを席に向ける */
+/* LINEのような並び：自分は右、ほかの人は左。席ごとの色と形の印で誰かが分かる */
 .msg {
-  position: relative;
-  max-width: 70%;
   display: flex;
+  align-items: flex-end;
   gap: 8px;
-  align-items: baseline;
-  padding: 6px 12px;
-  border-radius: 12px;
-  background: #1b1e24;
+  max-width: 78%;
 }
-.msg .text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.msg.first {
+  margin-top: 6px;
 }
-.msg::before {
-  content: "";
-  position: absolute;
-  border: 6px solid transparent;
-}
-.msg.from-left {
+.msg.other {
   align-self: flex-start;
 }
-.msg.from-left::before {
-  left: -12px;
-  top: 10px;
-  border-right-color: #1b1e24;
-}
-.msg.from-right {
+.msg.mine {
   align-self: flex-end;
 }
-.msg.from-right::before {
-  right: -12px;
-  top: 10px;
-  border-left-color: #1b1e24;
-}
-.msg.from-top {
-  align-self: center;
-}
-.msg.from-top::before {
-  top: -12px;
-  left: calc(50% - 6px);
-  border-bottom-color: #1b1e24;
-}
-.msg.from-me {
-  align-self: center;
-  background: rgb(212 168 74 / 18%);
-  outline: 1px solid rgb(212 168 74 / 45%);
-}
-.msg.from-me::before {
-  bottom: -12px;
-  left: calc(50% - 6px);
-  border-top-color: rgb(212 168 74 / 35%);
-}
-.msg.from-me .text {
-  color: #fff;
-}
-.who {
+.avatar {
   flex: none;
+  width: 52px;
+  font-size: 0.8rem;
   font-weight: bold;
-  font-size: 0.85rem;
+  align-self: flex-start;
+  padding-top: 6px;
 }
-.who.s0 {
-  color: var(--s0);
+.bubble {
+  position: relative;
+  padding: 7px 12px;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: color-mix(in srgb, var(--seat) 22%, #16181d);
+  border: 1px solid color-mix(in srgb, var(--seat) 55%, transparent);
 }
-.who.s1 {
-  color: var(--s1);
+/* 続けて話したときの最初の発言だけ、話し手側の角を尖らせる */
+.msg.other.first .bubble {
+  border-top-left-radius: 4px;
 }
-.who.s2 {
-  color: var(--s2);
+.msg.mine.first .bubble {
+  border-top-right-radius: 4px;
 }
-.who.s3 {
-  color: var(--s3);
+.msg.mine .bubble {
+  color: #fff;
+  background: color-mix(in srgb, var(--seat) 38%, #16181d);
+}
+
+/* 席ごとの色。色だけに頼らず、形（●▲■◆）と P番号を必ず添える */
+.s0 {
+  --seat: var(--s0);
+}
+.s1 {
+  --seat: var(--s1);
+}
+.s2 {
+  --seat: var(--s2);
+}
+.s3 {
+  --seat: var(--s3);
+}
+.seat-mark {
+  color: var(--seat);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: bold;
+}
+.seat-mark .shape {
+  font-size: 0.85em;
 }
 .chat-input {
   display: flex;

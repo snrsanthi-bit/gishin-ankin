@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ClientMessage, RoomView, SeatView } from "@gishin-ankin/server/protocol";
 import { useGame, type MoneyCheck, type Status } from "./useGame.ts";
-import { clockwise, man, parseAmount, remainingSec, seatLabel, seatPosition, signedMan } from "./format.ts";
+import { clockwise, man, parseAmount, remainingSec, seatLabel, seatShape, signedMan } from "./format.ts";
 
 type MatchView = Extract<RoomView, { phase: "playing" | "finished" }>;
 type Send = (m: ClientMessage) => void;
@@ -100,7 +100,7 @@ function Table(props: {
           <Lamps streak={view.streak} drawStreak={view.drawStreak} draw={view.finished?.draw ?? false} />
           {view.phase === "playing" && <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />}
         </div>
-        <Chat messages={props.chat} mySeat={view.you.seat} players={view.seats.length} onSend={props.sendChat} />
+        <Chat messages={props.chat} mySeat={view.you.seat} onSend={props.sendChat} />
       </section>
 
       <section className="area-me">
@@ -155,6 +155,16 @@ function TimerRing({ deadline, thinkMs, now }: { deadline: number | null; thinkM
   );
 }
 
+/** 席の印：色・形・P番号をまとめたもの。席とチャットで同じものを使う */
+function SeatMark({ seat }: { seat: number }) {
+  return (
+    <span className={`seat-mark s${seat}`}>
+      <span className="shape">{seatShape(seat)}</span>
+      {seatLabel(seat)}
+    </span>
+  );
+}
+
 function seatState(s: SeatView, playing: boolean): { icon: string; label: string; cls: string } {
   if (s.forfeited) return { icon: "✕", label: "棄権", cls: "forfeited" };
   if (!s.connected) return { icon: "💤", label: "離席中", cls: "away" };
@@ -168,7 +178,9 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
   const canCheck = view.phase === "playing" && view.you.moneyChecksLeft > 0 && !view.you.forfeited && !seat.forfeited;
   return (
     <div className={`seat ${state.cls}`} title={state.label}>
-      <div className="seat-name">{seatLabel(seat.seat)}</div>
+      <div className="seat-name">
+        <SeatMark seat={seat.seat} />
+      </div>
       <div className="envelope" aria-label={state.label}>
         {state.icon}
       </div>
@@ -191,17 +203,7 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
   );
 }
 
-function Chat({
-  messages,
-  mySeat,
-  players,
-  onSend,
-}: {
-  messages: ChatMessage[];
-  mySeat: number;
-  players: number;
-  onSend: (t: string) => void;
-}) {
+function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: number; onSend: (t: string) => void }) {
   const [text, setText] = useState("");
   const [unread, setUnread] = useState(false);
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -246,13 +248,22 @@ function Chat({
           if (atBottom.current) setUnread(false);
         }}
       >
-        {messages.map((m) => (
-          // 発言は、話した人の席の方向に寄せて置く（誰が話したかを、文字を読まずに位置で分かるように）
-          <li key={m.id} className={`msg from-${seatPosition(m.seat, mySeat, players)}`}>
-            <span className={`who s${m.seat}`}>{seatLabel(m.seat)}</span>
-            <span className="text">{m.text}</span>
-          </li>
-        ))}
+        {messages.map((m, i) => {
+          // LINEのように、自分の発言は右、ほかの人は左。席ごとの色と形の印で誰かが分かる。
+          // 同じ人が続けて話したときは、印を最初の1回だけ出す
+          const mine = m.seat === mySeat;
+          const first = messages[i - 1]?.seat !== m.seat;
+          return (
+            <li key={m.id} className={`msg s${m.seat} ${mine ? "mine" : "other"} ${first ? "first" : "cont"}`}>
+              {!mine && (
+                <span className="avatar" aria-label={seatLabel(m.seat)} title={seatLabel(m.seat)}>
+                  {first ? <SeatMark seat={m.seat} /> : null}
+                </span>
+              )}
+              <span className="bubble">{m.text}</span>
+            </li>
+          );
+        })}
       </ol>
       {unread && (
         <button className="unread" onClick={scrollToBottom}>
@@ -289,7 +300,7 @@ function MyArea({ view, send }: { view: MatchView; send: Send }) {
     <div className="me-row">
       <div className="me-seat">
         <div className="seat-name">
-          {seatLabel(view.you.seat)}
+          <SeatMark seat={view.you.seat} />
           {view.isTop && view.phase === "playing" && (
             <span className="crown" title="あなたが1位です">
               ♛
