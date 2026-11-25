@@ -3,8 +3,13 @@
  * 画面側もこの型を使う。
  */
 import type { RoomView } from "./room.ts";
+import type { ChatMessage } from "./chat.ts";
 
 export type { RoomView, SeatView, LastGameView, FinishedView } from "./room.ts";
+export type { ChatMessage } from "./chat.ts";
+
+/** 受け付ける生の文字数の上限（整形・文字数チェックの前に、極端に長いものを弾く） */
+export const MAX_RAW_CHAT_LENGTH = 2000;
 
 /** ブラウザ → サーバー */
 export type ClientMessage =
@@ -13,6 +18,7 @@ export type ClientMessage =
   | { type: "input"; amount: number }
   | { type: "confirm"; confirmed: boolean }
   | { type: "checkMoney"; seat: number }
+  | { type: "chat"; text: string }
   /** 試合が終わった部屋を出て、次の試合を探す */
   | { type: "next" };
 
@@ -23,6 +29,10 @@ export type ServerMessage =
   /** 画面に出す情報。now はサーバーの時刻（締め切りまでの残り時間の計算用） */
   | { type: "view"; view: RoomView; now: number }
   | { type: "moneyCheck"; seat: number; money: number }
+  /** 新しいチャット（部屋の全員に届く） */
+  | { type: "chat"; message: ChatMessage }
+  /** 入室・入り直しのときに、それまでのチャットをまとめて送る */
+  | { type: "chatHistory"; messages: ChatMessage[] }
   | { type: "error"; message: string };
 
 /** 受け取った文字列を ClientMessage として読む。形がおかしければ null */
@@ -47,6 +57,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return typeof m["confirmed"] === "boolean" ? { type: "confirm", confirmed: m["confirmed"] } : null;
     case "checkMoney":
       return typeof m["seat"] === "number" ? { type: "checkMoney", seat: m["seat"] } : null;
+    case "chat": {
+      const text = m["text"];
+      return typeof text === "string" && text.length <= MAX_RAW_CHAT_LENGTH ? { type: "chat", text } : null;
+    }
     case "next":
       return { type: "next" };
     default:

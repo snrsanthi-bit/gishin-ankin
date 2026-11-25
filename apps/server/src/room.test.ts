@@ -142,3 +142,15 @@ test("試合中でないときの操作はエラーになる", () => {
   assert.equal(room.setInput("a", 10).ok, false);
   assert.equal(room.viewFor("zz").ok, false);
 });
+
+test("運営用の記録には元の文章と送った人が残る", () => {
+  const room = fullRoom();
+  const r = room.sendChat("a", "死ね", 1);
+  assert.ok(r.ok);
+  assert.equal(r.value.text, "＊＊＊");
+  const rec = room.chatRecordForOperator()[0];
+  assert.equal(rec?.original, "死ね");
+  assert.equal(rec?.playerId, "a");
+  assert.deepEqual(room.chatHistory().map((m) => m.text), ["＊＊＊"]);
+  assert.ok(!("original" in (room.chatHistory()[0] ?? {})), "参加者向けの履歴に元の文章は入らない");
+});
