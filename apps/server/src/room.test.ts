@@ -154,3 +154,14 @@ test("運営用の記録には元の文章と送った人が残る", () => {
   assert.deepEqual(room.chatHistory().map((m) => m.text), ["＊＊＊"]);
   assert.ok(!("original" in (room.chatHistory()[0] ?? {})), "参加者向けの履歴に元の文章は入らない");
 });
+
+test("ゲームごとの結果（全員全額か）が画面情報に並ぶ", () => {
+  const room = fullRoom();
+  allIn(room);
+  room.tick(1);
+  room.setInput("a", 0);
+  for (const id of IDS) room.confirm(id);
+  room.tick(2);
+  assert.deepEqual(view(room, "b").outcomes, [true, false]);
+  assert.equal(view(room, "b").thinkMs, THINK);
+});
