@@ -257,8 +257,9 @@ input.invalid {
 /* 席 */
 .seat {
   min-width: 140px;
-  background: var(--panel);
-  border: 1px solid var(--line);
+  /* 席の色はチャットの吹き出しと同じ。卓の席と発言をひと目で結びつける */
+  background: color-mix(in srgb, var(--seat, var(--line)) 14%, var(--panel));
+  border: 2px solid color-mix(in srgb, var(--seat, var(--line)) 70%, transparent);
   border-radius: 12px;
   padding: 10px;
   display: grid;
@@ -391,6 +392,9 @@ input.invalid {
 .seat-mark .shape {
   font-size: 0.85em;
 }
+.seat .seat-mark {
+  font-size: 1.1rem;
+}
 .chat-input {
   display: flex;
   gap: 8px;
@@ -421,8 +425,8 @@ input.invalid {
   display: flex;
   align-items: center;
   gap: 18px;
-  background: var(--panel);
-  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--seat, var(--accent)) 10%, var(--panel));
+  border: 2px solid color-mix(in srgb, var(--seat, var(--accent)) 70%, transparent);
   border-radius: 12px;
   padding: 10px 14px;
   flex-wrap: wrap;

@@ -177,7 +177,7 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
   const mine = checks.filter((c) => c.seat === seat.seat);
   const canCheck = view.phase === "playing" && view.you.moneyChecksLeft > 0 && !view.you.forfeited && !seat.forfeited;
   return (
-    <div className={`seat ${state.cls}`} title={state.label}>
+    <div className={`seat s${seat.seat} ${state.cls}`} title={state.label}>
       <div className="seat-name">
         <SeatMark seat={seat.seat} />
       </div>
@@ -297,7 +297,7 @@ function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: n
 function MyArea({ view, send }: { view: MatchView; send: Send }) {
   const l = view.last;
   return (
-    <div className="me-row">
+    <div className={`me-row s${view.you.seat}`}>
       <div className="me-seat">
         <div className="seat-name">
           <SeatMark seat={view.you.seat} />
