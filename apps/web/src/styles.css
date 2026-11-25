@@ -1,6 +1,8 @@
 /* 配置と見た目は「claude/UI規則.md」に従う。動き・音はまだ入れていない */
 :root {
   color-scheme: dark;
+  --board: #0c0d10;
+  --board-edge: #2a2d33;
   --bg: #121418;
   --felt: #17201c;
   --panel: #1d2026;
@@ -21,6 +23,7 @@
 }
 body {
   margin: 0;
+  background: radial-gradient(ellipse at 50% 55%, #1b1f24, var(--bg) 70%) fixed;
 }
 button {
   font: inherit;
@@ -127,8 +130,10 @@ input.invalid {
     ". top ."
     "left center right"
     "me me me";
-  gap: 10px;
-  background: radial-gradient(ellipse at center, var(--felt), var(--bg) 75%);
+  gap: 10px 14px;
+  /* 横長の画面でも卓が間延びしないよう、幅に上限をつけて真ん中に寄せる */
+  max-width: 1400px;
+  margin: 0 auto;
 }
 .bar {
   grid-area: bar;
@@ -147,10 +152,12 @@ input.invalid {
 .area-left {
   grid-area: left;
   align-self: center;
+  justify-self: end;
 }
 .area-right {
   grid-area: right;
   align-self: center;
+  justify-self: start;
 }
 .area-center {
   grid-area: center;
@@ -158,6 +165,16 @@ input.invalid {
   flex-direction: column;
   min-height: 0;
   gap: 8px;
+  /* 盤面：黒を主体にした飾りのない面。細い二重線の縁だけで区切る。チャットはこの上に置く */
+  padding: 14px 18px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--board-edge);
+  outline: 1px solid rgb(212 168 74 / 18%);
+  outline-offset: -7px;
+  background: var(--board);
+  box-shadow:
+    inset 0 0 60px rgb(0 0 0 / 70%),
+    0 10px 30px rgb(0 0 0 / 45%);
 }
 .area-me {
   grid-area: me;
@@ -274,9 +291,13 @@ input.invalid {
 }
 .fold summary {
   cursor: pointer;
-  color: var(--muted);
   list-style: none;
   text-align: center;
+  opacity: 0.6;
+}
+.fold summary:hover,
+.fold[open] summary {
+  opacity: 1;
 }
 .fold summary::-webkit-details-marker {
   display: none;
@@ -289,30 +310,73 @@ input.invalid {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--panel) 85%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 12px;
 }
 .chat-list {
   flex: 1;
   overflow-y: auto;
   list-style: none;
   margin: 0;
-  padding: 12px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  scrollbar-color: rgb(255 255 255 / 20%) transparent;
 }
+/* 発言は話した人の席の方向に寄せ、吹き出しのしっぽを席に向ける */
 .msg {
+  position: relative;
+  max-width: 70%;
   display: flex;
   gap: 8px;
   align-items: baseline;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: #1b1e24;
 }
 .msg .text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.msg.mine .text {
+.msg::before {
+  content: "";
+  position: absolute;
+  border: 6px solid transparent;
+}
+.msg.from-left {
+  align-self: flex-start;
+}
+.msg.from-left::before {
+  left: -12px;
+  top: 10px;
+  border-right-color: #1b1e24;
+}
+.msg.from-right {
+  align-self: flex-end;
+}
+.msg.from-right::before {
+  right: -12px;
+  top: 10px;
+  border-left-color: #1b1e24;
+}
+.msg.from-top {
+  align-self: center;
+}
+.msg.from-top::before {
+  top: -12px;
+  left: calc(50% - 6px);
+  border-bottom-color: #1b1e24;
+}
+.msg.from-me {
+  align-self: center;
+  background: rgb(212 168 74 / 18%);
+  outline: 1px solid rgb(212 168 74 / 45%);
+}
+.msg.from-me::before {
+  bottom: -12px;
+  left: calc(50% - 6px);
+  border-top-color: rgb(212 168 74 / 35%);
+}
+.msg.from-me .text {
   color: #fff;
 }
 .who {
@@ -335,8 +399,12 @@ input.invalid {
 .chat-input {
   display: flex;
   gap: 8px;
-  padding: 8px;
-  border-top: 1px solid var(--line);
+  padding: 8px 4px 0;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+.chat-input input {
+  background: #15171b;
+  border-color: var(--board-edge);
 }
 .chat-input input {
   flex: 1;
@@ -505,6 +573,13 @@ input.invalid {
   .area-left,
   .area-right {
     align-self: stretch;
+    justify-self: stretch;
+  }
+  .area-left .seat,
+  .area-right .seat,
+  .area-top .seat {
+    height: 100%;
+    box-sizing: border-box;
   }
   .area-top {
     display: block;
@@ -518,5 +593,12 @@ input.invalid {
   }
   .amount input {
     width: 5em;
+  }
+  .area-center {
+    border-radius: 12px;
+    outline-offset: -5px;
+  }
+  .msg {
+    max-width: 85%;
   }
 }

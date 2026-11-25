@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ClientMessage, RoomView, SeatView } from "@gishin-ankin/server/protocol";
 import { useGame, type MoneyCheck, type Status } from "./useGame.ts";
-import { clockwise, man, parseAmount, remainingSec, seatLabel, signedMan } from "./format.ts";
+import { clockwise, man, parseAmount, remainingSec, seatLabel, seatPosition, signedMan } from "./format.ts";
 
 type MatchView = Extract<RoomView, { phase: "playing" | "finished" }>;
 type Send = (m: ClientMessage) => void;
@@ -100,7 +100,7 @@ function Table(props: {
           <Lamps streak={view.streak} drawStreak={view.drawStreak} draw={view.finished?.draw ?? false} />
           {view.phase === "playing" && <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />}
         </div>
-        <Chat messages={props.chat} mySeat={view.you.seat} onSend={props.sendChat} />
+        <Chat messages={props.chat} mySeat={view.you.seat} players={view.seats.length} onSend={props.sendChat} />
       </section>
 
       <section className="area-me">
@@ -179,7 +179,9 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
       ))}
       {canCheck && (
         <details className="fold">
-          <summary title="その他の操作">…</summary>
+          <summary title="所持金を確認" aria-label="所持金を確認">
+            🔍
+          </summary>
           <button className="small" onClick={() => send({ type: "checkMoney", seat: seat.seat })}>
             所持金を確認（残り{view.you.moneyChecksLeft}回）
           </button>
@@ -189,7 +191,17 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
   );
 }
 
-function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: number; onSend: (t: string) => void }) {
+function Chat({
+  messages,
+  mySeat,
+  players,
+  onSend,
+}: {
+  messages: ChatMessage[];
+  mySeat: number;
+  players: number;
+  onSend: (t: string) => void;
+}) {
   const [text, setText] = useState("");
   const [unread, setUnread] = useState(false);
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -235,7 +247,8 @@ function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: n
         }}
       >
         {messages.map((m) => (
-          <li key={m.id} className={m.seat === mySeat ? "msg mine" : "msg"}>
+          // 発言は、話した人の席の方向に寄せて置く（誰が話したかを、文字を読まずに位置で分かるように）
+          <li key={m.id} className={`msg from-${seatPosition(m.seat, mySeat, players)}`}>
             <span className={`who s${m.seat}`}>{seatLabel(m.seat)}</span>
             <span className="text">{m.text}</span>
           </li>
