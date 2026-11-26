@@ -19,7 +19,8 @@ class FakeConn implements Conn {
 }
 
 let n = 0;
-const hubWith = () => new Hub({ seed: 1, newId: () => `p${++n}` });
+// 締め切りから結果表示までの間は0にしておく（間そのものは room.test.ts で確かめる）
+const hubWith = () => new Hub({ seed: 1, newId: () => `p${++n}`, roomConfig: { ...DEFAULT_ROOM_CONFIG, revealDelayMs: 0 } });
 const send = (hub: Hub, c: Conn, msg: object, now = 0) => hub.handle(c, JSON.stringify(msg), now);
 
 function fourJoined(hub: Hub) {

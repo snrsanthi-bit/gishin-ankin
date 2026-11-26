@@ -98,7 +98,10 @@ function Table(props: {
       <section className="area-center">
         <div className="center-head">
           <Lamps streak={view.streak} drawStreak={view.drawStreak} draw={view.finished?.draw ?? false} />
-          {view.phase === "playing" && <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />}
+          {view.phase === "playing" && view.stage === "accepting" && (
+            <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />
+          )}
+          {view.phase === "playing" && view.stage === "revealing" && <Tallying />}
         </div>
         <Chat messages={props.chat} mySeat={view.you.seat} onSend={props.sendChat} />
       </section>
@@ -139,6 +142,20 @@ function Lamps({ streak, drawStreak, draw }: { streak: number; drawStreak: numbe
   );
 }
 
+/** 集計の間：封筒を開けて数えている。結果に関係なく毎回同じ見せ方 */
+function Tallying() {
+  return (
+    <div className="tallying" title="集計中" aria-label="集計中">
+      <span className="tally-env">✉</span>
+      <span className="tally-dots">
+        <span />
+        <span />
+        <span />
+      </span>
+    </div>
+  );
+}
+
 /** 残り時間：縮んでいく輪 */
 function TimerRing({ deadline, thinkMs, now }: { deadline: number | null; thinkMs: number; now: number }) {
   const left = remainingSec(deadline, now);
@@ -175,7 +192,12 @@ function seatState(s: SeatView, playing: boolean): { icon: string; label: string
 function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; checks: MoneyCheck[]; send: Send }) {
   const state = seatState(seat, view.phase === "playing");
   const mine = checks.filter((c) => c.seat === seat.seat);
-  const canCheck = view.phase === "playing" && view.you.moneyChecksLeft > 0 && !view.you.forfeited && !seat.forfeited;
+  const canCheck =
+    view.phase === "playing" &&
+    view.stage === "accepting" &&
+    view.you.moneyChecksLeft > 0 &&
+    !view.you.forfeited &&
+    !seat.forfeited;
   return (
     <div className={`seat s${seat.seat} ${state.cls}`} title={state.label}>
       <div className="seat-name">
@@ -330,6 +352,9 @@ function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
   const [text, setText] = useState(view.you.input === null ? "" : String(view.you.input));
   const amount = parseAmount(text, money);
   const confirmed = view.you.confirmed;
+  // 集計中は締め切った後なので、入力も確定もできない
+  const closed = view.stage === "revealing";
+  const locked = confirmed || closed;
 
   const set = (v: number) => {
     setText(String(v));
@@ -347,7 +372,7 @@ function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
         <input
           inputMode="numeric"
           value={text}
-          disabled={confirmed}
+          disabled={locked}
           onChange={(e) => onText(e.target.value)}
           placeholder="0"
           aria-label={`出資額（0〜${money}万）`}
@@ -356,17 +381,21 @@ function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
         <span className="unit">/ {money}万</span>
       </div>
       <div className="quick">
-        <button onClick={() => set(0)} disabled={confirmed}>
+        <button onClick={() => set(0)} disabled={locked}>
           0
         </button>
-        <button onClick={() => set(Math.floor(money / 2))} disabled={confirmed}>
+        <button onClick={() => set(Math.floor(money / 2))} disabled={locked}>
           半分
         </button>
-        <button onClick={() => set(money)} disabled={confirmed}>
+        <button onClick={() => set(money)} disabled={locked}>
           全額
         </button>
       </div>
-      {confirmed ? (
+      {closed ? (
+        <button className="confirm done" disabled title="集計中">
+          ✉
+        </button>
+      ) : confirmed ? (
         <button className="confirm done" onClick={() => send({ type: "confirm", confirmed: false })} title="確定を取り消す">
           ✉ 確定済み
         </button>

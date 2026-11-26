@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { DEFAULT_ROOM_CONFIG, Room, type RoomView } from "./room.ts";
 
 const IDS = ["a", "b", "c", "d"];
+// 締め切りから結果表示までの間を0にした設定（間のテストは下で別に行う）
+const CFG = { ...DEFAULT_ROOM_CONFIG, revealDelayMs: 0 };
 const THINK = DEFAULT_ROOM_CONFIG.thinkMs;
 
 function fullRoom(seed = 1): Room {
-  const room = new Room(DEFAULT_ROOM_CONFIG, seed);
+  const room = new Room(CFG, seed);
   for (const id of IDS) assert.ok(room.join(id, 0).ok);
   return room;
 }
@@ -24,7 +26,7 @@ function allIn(room: Room) {
 }
 
 test("4人そろうまで待機し、そろったら試合が始まる。席番号はランダム", () => {
-  const room = new Room(DEFAULT_ROOM_CONFIG, 3);
+  const room = new Room(CFG, 3);
   room.join("a", 0);
   assert.deepEqual(room.viewFor("a"), { ok: true, value: { phase: "waiting", joined: 1, players: 4 } });
   room.join("b", 0);
@@ -137,7 +139,7 @@ test("5連続の全員全額でDraw。試合後に牌譜と次の参加費が見
 });
 
 test("試合中でないときの操作はエラーになる", () => {
-  const room = new Room(DEFAULT_ROOM_CONFIG, 1);
+  const room = new Room(CFG, 1);
   room.join("a", 0);
   assert.equal(room.setInput("a", 10).ok, false);
   assert.equal(room.viewFor("zz").ok, false);
@@ -164,4 +166,45 @@ test("ゲームごとの結果（全員全額か）が画面情報に並ぶ", ()
   room.tick(2);
   assert.deepEqual(view(room, "b").outcomes, [true, false]);
   assert.equal(view(room, "b").thinkMs, THINK);
+});
+
+test("締め切ってから結果の表示まで間を置き、その間は結果を画面情報に出さない", () => {
+  const DELAY = 2500;
+  const room = new Room({ ...DEFAULT_ROOM_CONFIG, revealDelayMs: DELAY }, 1);
+  for (const id of IDS) room.join(id, 0);
+  allIn(room);
+  assert.equal(room.tick(1000), true, "全員確定で締め切る");
+  const during = view(room, "a");
+  assert.equal(during.stage, "revealing");
+  assert.equal(during.revealAt, 1000 + DELAY);
+  assert.equal(during.deadline, null);
+  assert.equal(during.game, 0, "まだ次のゲームにならない");
+  assert.equal(during.you.money, 100, "所持金はまだ前のまま");
+  assert.deepEqual(during.outcomes, [], "●／×もまだ出さない");
+  assert.equal(during.last, null);
+  assert.ok(during.seats.every((s) => !s.confirmed), "封筒は回収される");
+
+  assert.equal(room.setInput("a", 1).ok, false, "集計中は出資できない");
+  assert.equal(room.confirm("a").ok, false);
+  assert.equal(room.checkMoney("a", (view(room, "a").you.seat + 1) % 4).ok, false);
+  assert.equal(room.sendChat("a", "どうだ", 1500).ok, true, "集計中もチャットはできる");
+
+  assert.equal(room.tick(1000 + DELAY - 1), false);
+  assert.equal(room.tick(1000 + DELAY + 200), true);
+  const after = view(room, "a");
+  assert.equal(after.stage, "accepting");
+  assert.equal(after.game, 1);
+  assert.equal(after.you.money, 120);
+  assert.deepEqual(after.outcomes, [true]);
+  assert.equal(after.deadline, 1000 + DELAY + DEFAULT_ROOM_CONFIG.thinkMs, "次の締め切りは表示の時刻から数える");
+});
+
+test("連続が途切れたときも、つながったときも、間の長さは同じ", () => {
+  const DELAY = 2500;
+  const room = new Room({ ...DEFAULT_ROOM_CONFIG, revealDelayMs: DELAY }, 1);
+  for (const id of IDS) room.join(id, 0);
+  room.setInput("a", 0);
+  for (const id of IDS) room.confirm(id);
+  room.tick(500);
+  assert.equal(view(room, "b").revealAt, 500 + DELAY);
 });
