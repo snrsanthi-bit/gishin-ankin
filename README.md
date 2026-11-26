@@ -31,7 +31,7 @@ pnpm dev:web     # 画面だけ起動
 pnpm bots        # 起動中のサーバーにBotを3体つなぐ（--n=4 でBotだけの試合）
 ```
 
-動作確認のときは `THINK_SEC=20 pnpm dev` のように、出資受付の時間を短くできる。
+動作確認のときは `THINK_SEC=20 pnpm dev` のように、出資受付の時間を短くできる。締め切りから結果表示までの間は `REVEAL_SEC`（初期値2.5秒）。
 ひとりで試すときは、ブラウザで「試合を探す」を押してから、別のターミナルで `pnpm bots` を実行する（ブラウザ1つ＋Bot3体で試合が始まる）。
 
 `pnpm play --seed=42` で同じ試合をもう一度、`pnpm play --bots=smart,grudger,allIn` でBotを指定できる。

@@ -26,6 +26,11 @@ export type RoomConfig = {
   players: number;
   /** 1ゲームの出資受付時間（ミリ秒） */
   thinkMs: number;
+  /**
+   * 締め切りから結果表示までの間（ミリ秒）。UI規則の REVEAL_DELAY_SEC。
+   * 途切れたかどうかに関係なく毎回同じ長さにし、結果はこの間が終わるまで端末に渡さない
+   */
+  revealDelayMs: number;
   /** 1試合あたりの所持金確認の回数 */
   moneyChecksPerMatch: number;
   rules: RulesConfig;
@@ -35,12 +40,16 @@ export type RoomConfig = {
 export const DEFAULT_ROOM_CONFIG: RoomConfig = {
   players: 4,
   thinkMs: 180_000,
+  revealDelayMs: 2_500,
   moneyChecksPerMatch: 1,
   rules: DEFAULT_CONFIG,
   chat: DEFAULT_CHAT_CONFIG,
 };
 
 export type RoomPhase = "waiting" | "playing" | "finished";
+
+/** 試合中の段階：出資の受付中か、締め切って集計中（結果表示待ち）か */
+export type RoomStage = "accepting" | "revealing";
 
 type Player = {
   id: string;
@@ -80,6 +89,10 @@ export type RoomView =
   | { phase: "waiting"; joined: number; players: number }
   | {
       phase: "playing" | "finished";
+      /** 試合中の段階。集計中は出資・確定・所持金確認ができない（チャットはできる） */
+      stage: RoomStage;
+      /** 集計中のとき、結果を表示する時刻（ミリ秒）。それ以外は null */
+      revealAt: number | null;
       you: { seat: number; money: number; input: number | null; confirmed: boolean; forfeited: boolean; moneyChecksLeft: number };
       game: number;
       gamesPerMatch: number;
@@ -109,6 +122,10 @@ export class Room {
   private readonly players: Player[] = [];
   private match: MatchState | null = null;
   private deadline: number | null = null;
+  private stage: RoomStage = "accepting";
+  private revealAt: number | null = null;
+  /** 締め切ったが、まだ表示していない結果。表示の瞬間まで画面情報には出さない */
+  private pending: { state: MatchState; result: GameResult } | null = null;
   private readonly history: GameResult[] = [];
   private nextFee: number | null = null;
   private readonly chatLog: StoredChatMessage[] = [];
@@ -167,6 +184,7 @@ export class Room {
     if (!player) return err("この部屋の参加者ではありません");
     if (this.phase !== "playing" || !this.match) return err("試合中ではありません");
     if (this.match.seats[player.seat]?.forfeited) return err("棄権しています");
+    if (this.stage === "revealing") return err("集計中です");
     return ok({ player, match: this.match });
   }
 
@@ -203,29 +221,53 @@ export class Room {
   }
 
   /**
-   * 時間を進める。締め切りを過ぎたか、参加中の全員が確定していたら、ゲームを締め切る。
-   * 締め切ったら true。
+   * 時間を進める。状態が変わったら true。
+   * 1. 受付中：締め切りを過ぎたか、参加中の全員が確定していたら締め切って、集計中にする
+   * 2. 集計中：表示の時刻になったら、結果を反映して次のゲーム（または試合終了）へ
+   * 間が0なら、1と2が同じ呼び出しで続けて起きる
    */
   tick(now: number): boolean {
-    if (this.phase !== "playing" || !this.match || this.deadline === null) return false;
-    const match = this.match;
-    const active = this.players.filter((p) => !match.seats[p.seat]?.forfeited);
-    const allConfirmed = active.length > 0 && active.every((p) => p.confirmed);
-    if (!allConfirmed && now < this.deadline) return false;
-    this.resolve(now);
-    return true;
+    if (this.phase !== "playing" || !this.match) return false;
+    let changed = false;
+    if (this.stage === "accepting" && this.deadline !== null) {
+      const match = this.match;
+      const active = this.players.filter((p) => !match.seats[p.seat]?.forfeited);
+      const allConfirmed = active.length > 0 && active.every((p) => p.confirmed);
+      if (allConfirmed || now >= this.deadline) {
+        this.close(now);
+        changed = true;
+      }
+    }
+    if (this.stage === "revealing" && this.revealAt !== null && now >= this.revealAt) {
+      this.reveal(this.revealAt);
+      changed = true;
+    }
+    return changed;
   }
 
-  private resolve(now: number): void {
+  /** 締め切り：出資を確定して計算はしておくが、結果は表示の時刻まで出さない */
+  private close(now: number): void {
     if (!this.match) return;
     const inputs: Contribution[] = this.players.map((p) => p.input);
-    const { state, result } = resolveGame(this.config.rules, this.match, inputs);
-    this.match = state;
-    this.history.push(result);
+    this.pending = resolveGame(this.config.rules, this.match, inputs);
     for (const p of this.players) {
       p.input = null;
       p.confirmed = false;
     }
+    this.stage = "revealing";
+    this.deadline = null;
+    this.revealAt = now + this.config.revealDelayMs;
+  }
+
+  /** 結果の表示：4人そろって同じ時刻に。次のゲームの締め切りも表示の時刻から数える */
+  private reveal(at: number): void {
+    if (!this.pending) return;
+    const { state, result } = this.pending;
+    this.pending = null;
+    this.match = state;
+    this.history.push(result);
+    this.stage = "accepting";
+    this.revealAt = null;
     if (state.finished) {
       this.phase = "finished";
       this.deadline = null;
@@ -236,7 +278,7 @@ export class Room {
         remainderYen: state.remainderYen,
       }).fee;
     } else {
-      this.deadline = now + this.config.thinkMs;
+      this.deadline = at + this.config.thinkMs;
     }
   }
 
@@ -268,6 +310,8 @@ export class Room {
 
     return ok({
       phase: this.phase,
+      stage: this.stage,
+      revealAt: this.revealAt,
       you: {
         seat: player.seat,
         money,

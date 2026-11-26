@@ -35,10 +35,6 @@ export function signedMan(v: number): string {
   return v >= 0 ? `+${v}万` : `−${-v}万`;
 }
 
-export type SeatPosition = "me" | "left" | "top" | "right";
-
-/** 自分から見た席の位置（4人卓：自分が下、時計回りに左・上・右） */
-export function seatPosition(seat: number, mySeat: number, players = 4): SeatPosition {
-  const order: SeatPosition[] = ["me", "left", "top", "right"];
-  return order[(((seat - mySeat) % players) + players) % players] ?? "top";
-}
+/** 席ごとの形。色だけに頼らず、形でも見分けられるようにする（UI規則 8） */
+export const SEAT_SHAPES = ["●", "▲", "■", "◆"] as const;
+export const seatShape = (seat: number): string => SEAT_SHAPES[seat % SEAT_SHAPES.length] ?? "●";

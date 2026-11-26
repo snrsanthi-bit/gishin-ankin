@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ClientMessage, RoomView, SeatView } from "@gishin-ankin/server/protocol";
 import { useGame, type MoneyCheck, type Status } from "./useGame.ts";
-import { clockwise, man, parseAmount, remainingSec, seatLabel, seatPosition, signedMan } from "./format.ts";
+import { clockwise, man, parseAmount, remainingSec, seatLabel, seatShape, signedMan } from "./format.ts";
 
 type MatchView = Extract<RoomView, { phase: "playing" | "finished" }>;
 type Send = (m: ClientMessage) => void;
@@ -98,9 +98,12 @@ function Table(props: {
       <section className="area-center">
         <div className="center-head">
           <Lamps streak={view.streak} drawStreak={view.drawStreak} draw={view.finished?.draw ?? false} />
-          {view.phase === "playing" && <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />}
+          {view.phase === "playing" && view.stage === "accepting" && (
+            <TimerRing deadline={view.deadline} thinkMs={view.thinkMs} now={now} />
+          )}
+          {view.phase === "playing" && view.stage === "revealing" && <Tallying />}
         </div>
-        <Chat messages={props.chat} mySeat={view.you.seat} players={view.seats.length} onSend={props.sendChat} />
+        <Chat messages={props.chat} mySeat={view.you.seat} onSend={props.sendChat} />
       </section>
 
       <section className="area-me">
@@ -139,6 +142,20 @@ function Lamps({ streak, drawStreak, draw }: { streak: number; drawStreak: numbe
   );
 }
 
+/** 集計の間：封筒を開けて数えている。結果に関係なく毎回同じ見せ方 */
+function Tallying() {
+  return (
+    <div className="tallying" title="集計中" aria-label="集計中">
+      <span className="tally-env">✉</span>
+      <span className="tally-dots">
+        <span />
+        <span />
+        <span />
+      </span>
+    </div>
+  );
+}
+
 /** 残り時間：縮んでいく輪 */
 function TimerRing({ deadline, thinkMs, now }: { deadline: number | null; thinkMs: number; now: number }) {
   const left = remainingSec(deadline, now);
@@ -155,6 +172,16 @@ function TimerRing({ deadline, thinkMs, now }: { deadline: number | null; thinkM
   );
 }
 
+/** 席の印：色・形・P番号をまとめたもの。席とチャットで同じものを使う */
+function SeatMark({ seat }: { seat: number }) {
+  return (
+    <span className={`seat-mark s${seat}`}>
+      <span className="shape">{seatShape(seat)}</span>
+      {seatLabel(seat)}
+    </span>
+  );
+}
+
 function seatState(s: SeatView, playing: boolean): { icon: string; label: string; cls: string } {
   if (s.forfeited) return { icon: "✕", label: "棄権", cls: "forfeited" };
   if (!s.connected) return { icon: "💤", label: "離席中", cls: "away" };
@@ -165,10 +192,17 @@ function seatState(s: SeatView, playing: boolean): { icon: string; label: string
 function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; checks: MoneyCheck[]; send: Send }) {
   const state = seatState(seat, view.phase === "playing");
   const mine = checks.filter((c) => c.seat === seat.seat);
-  const canCheck = view.phase === "playing" && view.you.moneyChecksLeft > 0 && !view.you.forfeited && !seat.forfeited;
+  const canCheck =
+    view.phase === "playing" &&
+    view.stage === "accepting" &&
+    view.you.moneyChecksLeft > 0 &&
+    !view.you.forfeited &&
+    !seat.forfeited;
   return (
-    <div className={`seat ${state.cls}`} title={state.label}>
-      <div className="seat-name">{seatLabel(seat.seat)}</div>
+    <div className={`seat s${seat.seat} ${state.cls}`} title={state.label}>
+      <div className="seat-name">
+        <SeatMark seat={seat.seat} />
+      </div>
       <div className="envelope" aria-label={state.label}>
         {state.icon}
       </div>
@@ -191,17 +225,7 @@ function Seat({ seat, view, checks, send }: { seat: SeatView; view: MatchView; c
   );
 }
 
-function Chat({
-  messages,
-  mySeat,
-  players,
-  onSend,
-}: {
-  messages: ChatMessage[];
-  mySeat: number;
-  players: number;
-  onSend: (t: string) => void;
-}) {
+function Chat({ messages, mySeat, onSend }: { messages: ChatMessage[]; mySeat: number; onSend: (t: string) => void }) {
   const [text, setText] = useState("");
   const [unread, setUnread] = useState(false);
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -246,13 +270,22 @@ function Chat({
           if (atBottom.current) setUnread(false);
         }}
       >
-        {messages.map((m) => (
-          // 発言は、話した人の席の方向に寄せて置く（誰が話したかを、文字を読まずに位置で分かるように）
-          <li key={m.id} className={`msg from-${seatPosition(m.seat, mySeat, players)}`}>
-            <span className={`who s${m.seat}`}>{seatLabel(m.seat)}</span>
-            <span className="text">{m.text}</span>
-          </li>
-        ))}
+        {messages.map((m, i) => {
+          // LINEのように、自分の発言は右、ほかの人は左。席ごとの色と形の印で誰かが分かる。
+          // 同じ人が続けて話したときは、印を最初の1回だけ出す
+          const mine = m.seat === mySeat;
+          const first = messages[i - 1]?.seat !== m.seat;
+          return (
+            <li key={m.id} className={`msg s${m.seat} ${mine ? "mine" : "other"} ${first ? "first" : "cont"}`}>
+              {!mine && (
+                <span className="avatar" aria-label={seatLabel(m.seat)} title={seatLabel(m.seat)}>
+                  {first ? <SeatMark seat={m.seat} /> : null}
+                </span>
+              )}
+              <span className="bubble">{m.text}</span>
+            </li>
+          );
+        })}
       </ol>
       {unread && (
         <button className="unread" onClick={scrollToBottom}>
@@ -286,10 +319,10 @@ function Chat({
 function MyArea({ view, send }: { view: MatchView; send: Send }) {
   const l = view.last;
   return (
-    <div className="me-row">
+    <div className={`me-row s${view.you.seat}`}>
       <div className="me-seat">
         <div className="seat-name">
-          {seatLabel(view.you.seat)}
+          <SeatMark seat={view.you.seat} />
           {view.isTop && view.phase === "playing" && (
             <span className="crown" title="あなたが1位です">
               ♛
@@ -319,6 +352,9 @@ function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
   const [text, setText] = useState(view.you.input === null ? "" : String(view.you.input));
   const amount = parseAmount(text, money);
   const confirmed = view.you.confirmed;
+  // 集計中は締め切った後なので、入力も確定もできない
+  const closed = view.stage === "revealing";
+  const locked = confirmed || closed;
 
   const set = (v: number) => {
     setText(String(v));
@@ -336,7 +372,7 @@ function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
         <input
           inputMode="numeric"
           value={text}
-          disabled={confirmed}
+          disabled={locked}
           onChange={(e) => onText(e.target.value)}
           placeholder="0"
           aria-label={`出資額（0〜${money}万）`}
@@ -345,17 +381,21 @@ function ContributionForm({ view, send }: { view: MatchView; send: Send }) {
         <span className="unit">/ {money}万</span>
       </div>
       <div className="quick">
-        <button onClick={() => set(0)} disabled={confirmed}>
+        <button onClick={() => set(0)} disabled={locked}>
           0
         </button>
-        <button onClick={() => set(Math.floor(money / 2))} disabled={confirmed}>
+        <button onClick={() => set(Math.floor(money / 2))} disabled={locked}>
           半分
         </button>
-        <button onClick={() => set(money)} disabled={confirmed}>
+        <button onClick={() => set(money)} disabled={locked}>
           全額
         </button>
       </div>
-      {confirmed ? (
+      {closed ? (
+        <button className="confirm done" disabled title="集計中">
+          ✉
+        </button>
+      ) : confirmed ? (
         <button className="confirm done" onClick={() => send({ type: "confirm", confirmed: false })} title="確定を取り消す">
           ✉ 確定済み
         </button>
