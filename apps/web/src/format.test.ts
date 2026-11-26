@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clockwise, man, parseAmount, remainingSec, seatLabel, signedMan } from "./format.ts";
+import { clockwise, man, parseAmount, remainingSec, seatLabel, seatShape, signedMan } from "./format.ts";
 
 test("円を万円で表示する", () => {
   assert.equal(man(750000), "75万");
@@ -30,4 +30,8 @@ test("入力欄の読み取り", () => {
   assert.equal(parseAmount("", 100), null);
   assert.equal(signedMan(147), "+147万");
   assert.equal(signedMan(-23), "−23万");
+});
+
+test("席ごとの形", () => {
+  assert.deepEqual([0, 1, 2, 3].map(seatShape), ["●", "▲", "■", "◆"]);
 });

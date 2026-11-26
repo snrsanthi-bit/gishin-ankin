@@ -19,7 +19,8 @@ class FakeConn implements Conn {
 }
 
 let n = 0;
-const hubWith = () => new Hub({ seed: 1, newId: () => `p${++n}` });
+// 締め切りから結果表示までの間は0にしておく（間そのものは room.test.ts で確かめる）
+const hubWith = () => new Hub({ seed: 1, newId: () => `p${++n}`, roomConfig: { ...DEFAULT_ROOM_CONFIG, revealDelayMs: 0 } });
 const send = (hub: Hub, c: Conn, msg: object, now = 0) => hub.handle(c, JSON.stringify(msg), now);
 
 function fourJoined(hub: Hub) {
@@ -156,4 +157,69 @@ test("試合が終わったら next で次の部屋へ。誰も見ていない�
   assert.ok(v && v.phase === "playing" && v.game === 0, "4人そろって次の試合");
   hub.tick(1);
   assert.equal(hub.roomCount, 1, "終わった部屋は片付いた");
+});
+
+test("チャットは部屋の全員に届き、送った人の席番号がつく", () => {
+  const hub = hubWith();
+  const conns = fourJoined(hub);
+  const [a] = conns;
+  assert.ok(a);
+  const aView = a.last("view")?.view;
+  assert.ok(aView && aView.phase === "playing");
+  send(hub, a, { type: "chat", text: "全額いこう" }, 5);
+  for (const c of conns) {
+    const m = c.last("chat")?.message;
+    assert.ok(m);
+    assert.equal(m.text, "全額いこう");
+    assert.equal(m.seat, aView.you.seat);
+    assert.equal(m.at, 5);
+  }
+  assert.ok(!JSON.stringify(conns[1]?.last("chat")).includes("playerId"), "誰が送ったかは席番号だけ");
+});
+
+test("別の部屋にはチャットが届かない", () => {
+  const hub = hubWith();
+  const first = fourJoined(hub);
+  const second = fourJoined(hub);
+  send(hub, first[0] as Conn, { type: "chat", text: "こんにちは" });
+  assert.equal(second[0]?.last("chat"), undefined);
+});
+
+test("伏せ字の後の文章が届く", () => {
+  const hub = hubWith();
+  const conns = fourJoined(hub);
+  send(hub, conns[0] as Conn, { type: "chat", text: "090-1234-5678 に電話して" });
+  assert.equal(conns[1]?.last("chat")?.message.text, "＊＊＊ に電話して");
+});
+
+test("待機中は話せない。空・連投はエラー", () => {
+  const hub = hubWith();
+  const a = new FakeConn();
+  send(hub, a, { type: "join" });
+  send(hub, a, { type: "chat", text: "はやく" });
+  assert.match(a.last("error")?.message ?? "", /試合が始まってから/);
+
+  const conns = fourJoined(hub);
+  const b = conns[1] as FakeConn;
+  send(hub, b, { type: "chat", text: "   " });
+  assert.match(b.last("error")?.message ?? "", /空/);
+  for (let i = 0; i < 5; i++) send(hub, b, { type: "chat", text: `${i}` }, i);
+  send(hub, b, { type: "chat", text: "まだ" }, 10);
+  assert.match(b.last("error")?.message ?? "", /間をあけて/);
+});
+
+test("入り直すと、それまでのチャットがまとめて届く", () => {
+  const hub = hubWith();
+  const conns = fourJoined(hub);
+  const c = conns[2] as FakeConn;
+  send(hub, conns[0] as Conn, { type: "chat", text: "1つ目" });
+  send(hub, conns[1] as Conn, { type: "chat", text: "2つ目" });
+  const id = c.last("welcome")?.playerId;
+  hub.disconnect(c);
+  const again = new FakeConn();
+  send(hub, again, { type: "join", playerId: id });
+  assert.deepEqual(
+    again.last("chatHistory")?.messages.map((m) => m.text),
+    ["1つ目", "2つ目"],
+  );
 });

@@ -34,3 +34,7 @@ export function parseAmount(text: string, max: number): number | null {
 export function signedMan(v: number): string {
   return v >= 0 ? `+${v}万` : `−${-v}万`;
 }
+
+/** 席ごとの形。色だけに頼らず、形でも見分けられるようにする（UI規則 8） */
+export const SEAT_SHAPES = ["●", "▲", "■", "◆"] as const;
+export const seatShape = (seat: number): string => SEAT_SHAPES[seat % SEAT_SHAPES.length] ?? "●";

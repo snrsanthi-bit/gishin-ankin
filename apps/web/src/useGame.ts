@@ -4,7 +4,7 @@
  * - もらった playerId をブラウザに保存し、切れたら自動でつなぎ直して同じ席に戻る
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, RoomView, ServerMessage } from "@gishin-ankin/server/protocol";
+import type { ChatMessage, ClientMessage, RoomView, ServerMessage } from "@gishin-ankin/server/protocol";
 
 const ID_KEY = "gishin-ankin:playerId";
 
@@ -30,6 +30,7 @@ export function useGame() {
   const [status, setStatus] = useState<Status>("idle");
   const [view, setView] = useState<RoomView | null>(null);
   const [checks, setChecks] = useState<MoneyCheck[]>([]);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   /** サーバー時刻 − 手元の時刻（残り時間の計算用） */
   const [offset, setOffset] = useState(0);
@@ -58,9 +59,14 @@ export function useGame() {
         case "view": {
           setOffset(msg.now - Date.now());
           const prev = viewRef.current;
-          // 新しい試合が始まったら、前の試合の所持金確認の結果は消す
-          if (prev && prev.phase !== "waiting" && msg.view.phase !== "waiting" && msg.view.game < prev.game) setChecks([]);
-          if (msg.view.phase === "waiting") setChecks([]);
+          // 新しい試合が始まったら、前の試合の所持金確認の結果とチャットは消す
+          const newMatch =
+            msg.view.phase === "waiting" ||
+            (prev !== null && prev.phase !== "waiting" && (msg.view.game < prev.game || prev.phase === "finished") && msg.view.phase === "playing");
+          if (newMatch) {
+            setChecks([]);
+            setChat([]);
+          }
           viewRef.current = msg.view;
           setView(msg.view);
           break;
@@ -71,6 +77,12 @@ export function useGame() {
           setChecks((c) => [...c, { game, seat: msg.seat, money: msg.money }]);
           break;
         }
+        case "chat":
+          setChat((c) => (c.some((m) => m.id === msg.message.id) ? c : [...c, msg.message]));
+          break;
+        case "chatHistory":
+          setChat(msg.messages);
+          break;
         case "error":
           setError(msg.message);
           setTimeout(() => setError((cur) => (cur === msg.message ? null : cur)), 4000);
@@ -109,5 +121,7 @@ export function useGame() {
     [],
   );
 
-  return { status, view, checks, error, offset, start, send };
+  const sendChat = useCallback((text: string) => send({ type: "chat", text }), [send]);
+
+  return { status, view, checks, chat, error, offset, start, send, sendChat };
 }
