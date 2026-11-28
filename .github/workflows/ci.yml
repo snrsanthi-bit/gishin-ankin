@@ -7,6 +7,26 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # ストアの PostgreSQL 版のテスト用
+    services:
+      db:
+        image: postgres:17
+        env:
+          POSTGRES_USER: gishin_ankin
+          POSTGRES_PASSWORD: gishin_ankin
+          POSTGRES_DB: gishin_ankin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gishin_ankin"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://gishin_ankin:gishin_ankin@localhost:5432/gishin_ankin
+
     steps:
       - uses: actions/checkout@v4
 
