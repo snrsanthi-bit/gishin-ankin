@@ -23,7 +23,7 @@ apps/
 pnpm install
 pnpm test        # 全パッケージのテスト
 pnpm typecheck   # 型チェック
-pnpm db:up       # 開発用DBを起動（Docker）
+pnpm db:up       # 開発用DBを起動（Docker、localhost:54329）
 pnpm db:down     # 停止
 pnpm db:migrate  # 表を作る・変更する（migrations/ の新しいSQLだけ流す）
 pnpm play        # ターミナルで練習試合（あなた1人＋Bot3体）
@@ -47,7 +47,8 @@ Botの種類：`allIn`（毎回全額）、`freeRider`（毎回0円）、`random
 
 ```sh
 pnpm db:up
-DATABASE_URL=postgres://gishin_ankin:gishin_ankin@localhost:5432/gishin_ankin pnpm test
+pnpm db:migrate
+pnpm test:db     # DATABASE_URL を開発用DBに向けて pnpm test
 ```
 
 ## お金の扱い（packages/rules）

@@ -21,7 +21,7 @@ import {
   type Tx,
 } from "./types.ts";
 
-export const DEFAULT_DATABASE_URL = "postgres://gishin_ankin:gishin_ankin@localhost:5432/gishin_ankin";
+export const DEFAULT_DATABASE_URL = "postgres://gishin_ankin:gishin_ankin@localhost:54329/gishin_ankin";
 
 // bigint（int8）を number で受け取る。お金は Number.MAX_SAFE_INTEGER に届かない前提で、届いたら止める
 pg.types.setTypeParser(20, (value: string) => {
