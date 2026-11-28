@@ -8,7 +8,8 @@
 packages/
   rules/   ルールエンジン（1ゲームの計算、試合終了から次の入場までの処理）、Bot、1試合の進行、ターミナル版。画面・サーバーに依存しない
 apps/
-  server/  サーバー。試合の部屋（room.ts）、接続の受付（hub.ts）、WebSocket（main.ts）
+  server/  サーバー。試合の部屋（room.ts）、接続の受付（hub.ts）、WebSocket（main.ts）、DBの読み書き（store/）
+           migrations/ に表の作成・変更のSQL
   web/     React の画面（Vite）。開発中は /ws をサーバーへ中継する
 ```
 
@@ -24,6 +25,7 @@ pnpm test        # 全パッケージのテスト
 pnpm typecheck   # 型チェック
 pnpm db:up       # 開発用DBを起動（Docker）
 pnpm db:down     # 停止
+pnpm db:migrate  # 表を作る・変更する（migrations/ の新しいSQLだけ流す）
 pnpm play        # ターミナルで練習試合（あなた1人＋Bot3体）
 pnpm dev         # サーバーと画面を一緒に起動 → http://localhost:5173
 pnpm dev:server  # サーバーだけ起動（ws://localhost:8787/ws）
@@ -36,6 +38,17 @@ pnpm bots        # 起動中のサーバーにBotを3体つなぐ（--n=4 でBot
 
 `pnpm play --seed=42` で同じ試合をもう一度、`pnpm play --bots=smart,grudger,allIn` でBotを指定できる。
 Botの種類：`allIn`（毎回全額）、`freeRider`（毎回0円）、`random`（ばらばら）、`grudger`（裏切られたら1回仕返し）、`smart`（協力しつつDraw直前に裏切ることがある）
+
+## DB（apps/server/src/store）
+
+- 読み書きは「ストア」にまとめる。お金の計算はしない（ルールエンジンの仕事）
+- メモリ版（テスト用）と PostgreSQL 版があり、同じ契約テスト（contract.ts）を流す
+- PostgreSQL 版のテストは `DATABASE_URL` があるときだけ流れる。手元では次のとおり（CIでも流す）
+
+```sh
+pnpm db:up
+DATABASE_URL=postgres://gishin_ankin:gishin_ankin@localhost:5432/gishin_ankin pnpm test
+```
 
 ## お金の扱い（packages/rules）
 

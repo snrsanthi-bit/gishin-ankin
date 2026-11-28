@@ -11,14 +11,17 @@
     "start": "node --disable-warning=ExperimentalWarning src/main.ts",
     "bots": "node --disable-warning=ExperimentalWarning src/dev/bots.ts",
     "test": "node --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "db:migrate": "node --disable-warning=ExperimentalWarning src/store/migrate.ts"
   },
   "dependencies": {
     "@gishin-ankin/rules": "workspace:*",
+    "pg": "^8.16.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.0",
     "@types/ws": "^8.5.0",
     "typescript": "^5.9.0"
   }

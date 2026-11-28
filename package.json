@@ -11,6 +11,7 @@
     "dev": "pnpm --parallel --filter @gishin-ankin/server --filter @gishin-ankin/web dev",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @gishin-ankin/server db:migrate",
     "play": "node --disable-warning=ExperimentalWarning packages/rules/src/cli/play.ts",
     "dev:server": "pnpm --filter @gishin-ankin/server dev",
     "bots": "pnpm --filter @gishin-ankin/server bots",
